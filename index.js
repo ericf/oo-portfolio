@@ -200,32 +200,34 @@ function Portfolio(name, holdings) {
 // -----------------------------------------------------------------------------
 
 var quotes = {
-    YHOO: new Quote('YHOO', 42.00),
+    YHOO: new Quote('YHOO', 40.00),
     AAPL: new Quote('AAPL', 543.00),
-    QQQ : new Quote('QQQ', 86.31)
+    GOOG: new Quote('GOOG', 1117.00),
+    QQQ : new Quote('QQQ', 86.31),
 };
 
-var p1 = new Portfolio('Tech', [
+var pTech = new Portfolio('Tech', [
     new Holding(quotes.YHOO, 50),
     new Holding(quotes.AAPL, 10),
     new Holding(quotes.QQQ, 200)
 ]);
 
-var p2 = new Portfolio('Tech', [
+var pInternet = new Portfolio('Internet', [
     new Holding(quotes.YHOO, 500),
-    new Holding(quotes.AAPL, 100)
+    new Holding(quotes.GOOG, 50)
 ]);
 
-Object.observe(p1, function (records) {
-    console.log('P1:', p1.value);
+Object.observe(pTech, function (records) {
+    console.log(pTech.name, pTech.value);
 });
 
-Object.observe(p2, function (records) {
-    console.log('P2:', p2.value);
+Object.observe(pInternet, function (records) {
+    console.log(pInternet.name, pInternet.value);
 });
 
-console.log('P1:', p1.value);
-console.log('P2:', p2.value);
+console.log(pTech.name, pTech.value);
+console.log(pInternet.name, pInternet.value);
 
-quotes.YHOO.price = 50.00;
-console.log('YHOO:', quotes.YHOO.price);
+quotes.YHOO.price += 10.00;
+quotes.GOOG.price -= 250.00;
+console.log(quotes);
