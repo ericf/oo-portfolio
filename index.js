@@ -206,27 +206,27 @@ var quotes = {
     QQQ : new Quote('QQQ', 86.31),
 };
 
-var pTech = new Portfolio('Tech', [
+var p1 = new Portfolio('Tech', [
     new Holding(quotes.YHOO, 50),
     new Holding(quotes.AAPL, 10),
     new Holding(quotes.QQQ, 200)
 ]);
 
-var pInternet = new Portfolio('Internet', [
+var p2 = new Portfolio('Internet', [
     new Holding(quotes.YHOO, 500),
     new Holding(quotes.GOOG, 50)
 ]);
 
-Object.observe(pTech, function (records) {
-    console.log(pTech.name, pTech.value);
+Object.observe(p1, function (records) {
+    console.log(p1.name, p1.value);
 });
 
-Object.observe(pInternet, function (records) {
-    console.log(pInternet.name, pInternet.value);
+Object.observe(p2, function (records) {
+    console.log(p2.name, p2.value);
 });
 
-console.log(pTech.name, pTech.value);
-console.log(pInternet.name, pInternet.value);
+console.log(p1.name, p1.value);
+console.log(p2.name, p2.value);
 
 quotes.YHOO.price += 10.00;
 quotes.GOOG.price -= 250.00;
