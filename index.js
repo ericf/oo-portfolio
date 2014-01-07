@@ -100,125 +100,132 @@ function Holding(quote, shares) {
 // -- Portfolio ----------------------------------------------------------------
 
 function Portfolio(name, holdings) {
-    // Private, internal state.
-    var _portfolio = this,
-        _holdings  = holdings;
+    this.name = name;
 
-    // Notifier to generate synthetic change records.
-    var notifier = Object.getNotifier(this);
+    Object.defineProperties(this, {
+        // Protected, internal state.
+        _holdings: {value: holdings, writeable: true},
+        _notifier: {value: Object.getNotifier(this)},
 
-    function notifyValueChange(oldValue) {
-        notifier.notify({
-            type    : UPDATE_TYPE,
-            name    : 'value',
-            oldValue: oldValue
-        });
-    }
+        holdings: {
+            enumerable: true,
+            writeable : true,
+            get       : this._getHoldings,
+            set       : this._setHoldings
+        },
 
-    // Observer for both the collection of `holdings` being swapped out and a
-    // single holding being updated, and generate a synthetic `value` record.
-    function holdingsObserver(records) {
+        value: {
+            enumerable: true,
+            get       : this._getValue
+        }
+    });
+
+    // Observe both the `holdings` collection _and_ every holding object.
+    this._observeHoldings(holdings);
+}
+
+Portfolio.prototype = {
+    // -- Accessors ------------------------------------------------------------
+
+    _getHoldings: function () {
+        return this._holdings;
+    },
+
+    _getValue: function () {
+        return this.holdings.reduce(function (total, holding) {
+            return total + holding.value;
+        }, 0);
+    },
+
+    _setHoldings: function (holdings) {
+        if (holdings === this._holdings) { return; }
+
+        this._notifyHoldingsChange(this._holdings);
+        this._notifyValueChange(this.value);
+
+        this._unobserveHoldings(this._holdings);
+        this._observeHoldings(holdings);
+
+        this._holdings = holdings;
+    },
+
+    // -- Observers ------------------------------------------------------------
+
+    _holdingsObserver: function (records) {
         // TODO: Optimize to a single `notify()` via `reverse().some()`?
         records.forEach(function (record) {
             var addedCount = record.addedCount,
-                index      = record.index;
+                index      = record.index,
+                holdings   = record.object;
 
             if (record.type === 'splice') {
-                record.removed.forEach(unobserveHolding);
+                record.removed.forEach(this._unobserveHolding, this);
 
                 if (addedCount) {
-                    observeHolding(record.object.slice(index, index + addedCount));
+                    this._observeHolding(holdings.slice(index, index + addedCount));
                 }
+            } else if (record.type === UPDATE_TYPE) {
+                this._unobserveHolding(record.oldValue);
+                this._observeHolding(holdings[record.name]);
             }
 
-            notifyValueChange(_portfolio.value);
-        });
-    }
+            this._notifyValueChange(this.value);
+        }, this);
+    },
 
-    function holdingObserver(records) {
+    _holdingObserver: function (records) {
         // TODO: Optimize to a single `notify()` via `reverse().some()`?
         records.forEach(function (record) {
             var oldValue;
 
             if (record.name === 'value') {
-                oldValue = _portfolio.value;
+                oldValue = this.value;
                 oldValue += record.object.value - record.oldValue;
 
-                notifyValueChange(oldValue);
+                this._notifyValueChange(oldValue);
             }
+        }, this);
+    },
+
+    _observeHolding: function (holding) {
+        Object.observe(holding, this._holdingObserver.bind(this), [UPDATE_TYPE]);
+    },
+
+    _observeHoldings: function (holdings) {
+        Array.observe(holdings, this._holdingsObserver.bind(this), [
+            UPDATE_TYPE, 'splice'
+        ]);
+
+        holdings.forEach(this._observeHolding, this);
+    },
+
+    _unobserveHolding: function (holding) {
+        Object.unobserve(holding, this._holdingObserver);
+    },
+
+    _unobserveHoldings: function (holdings) {
+        Array.unobserve(holdings, this._holdingsObserver);
+        holdings.forEach(this._unobserveHolding, this);
+    },
+
+    // -- Notifiers ------------------------------------------------------------
+
+    _notifyHoldingsChange: function (oldHoldings) {
+        this._notifier.notify({
+            type    : UPDATE_TYPE,
+            name    : 'holdings',
+            oldValue: oldHoldings
+        });
+    },
+
+    _notifyValueChange: function (oldValue) {
+        this._notifier.notify({
+            type    : UPDATE_TYPE,
+            name    : 'value',
+            oldValue: oldValue
         });
     }
-
-    function observeHoldings(holdings) {
-        Array.observe(holdings, holdingsObserver, [UPDATE_TYPE, 'splice']);
-        holdings.forEach(observeHolding);
-    }
-
-    function unobserveHoldings(holdings) {
-        Array.unobserve(holdings, holdingsObserver);
-        holdings.forEach(unobserveHolding);
-    }
-
-    function observeHolding(holding) {
-        Object.observe(holding, holdingObserver, [UPDATE_TYPE]);
-    }
-
-    function unobserveHolding(holding) {
-        Object.unobserve(holding, holdingObserver);
-    }
-
-    this.name = name;
-
-    // Defines: `holdings`, and `value`.
-    Object.defineProperties(this, {
-        // Writable accessor to support swapping the entire collection, and this
-        // generates synthetic `holdings` and `value` change records.
-        holdings: {
-            enumerable: true,
-            writeable : true,
-
-            get: function () {
-                return _holdings;
-            },
-
-            set: function (holdings) {
-                if (holdings === _holdings) { return; }
-
-                // Unobserve both the `holdings` collection _and_ every holding
-                // because the entire collection is being swapped.
-                unobserveHoldings(_holdings);
-
-                notifier.notify({
-                    type    : UPDATE_TYPE,
-                    name    : 'holdings',
-                    oldValue: _holdings
-                });
-
-                notifyValueChange(this.value);
-
-                _holdings = holdings;
-
-                // Observe both the new `holdings` collection _and_ every new
-                // holding object.
-                observeHoldings(holdings);
-            }
-        },
-
-        // Accessor which computes the portfolio's current `value`.
-        value: {
-            enumerable: true,
-
-            get: function () {
-                return this.holdings.reduce(function (total, holding) {
-                    return total + holding.value;
-                }, 0);
-            }
-        }
-    });
-
-    // Observe both the `holdings` collection _and_ every holding object.
-    observeHoldings(holdings);
-}
+};
 
 // -----------------------------------------------------------------------------
 
