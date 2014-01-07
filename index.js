@@ -30,72 +30,85 @@ function Quote(symbol, price) {
 // -- Holding ------------------------------------------------------------------
 
 function Holding(quote, shares) {
-    // Private, internal state.
-    var _shares = shares;
-
-    // Notifier to generate synthetic change records.
-    var notifier = Object.getNotifier(this);
-
-    // Defines: `quote`, `shares`, and `value`.
     Object.defineProperties(this, {
-        // Write-once because the `quote` is tightly bound to a holding.
+        // Private, internal state.
+        _shares  : {value: shares, writeable: true},
+        _notifier: {value: Object.getNotifier(this)},
+
         quote: {
             enumerable: true,
             value     : quote
         },
 
-        // Accessor which generates synthetic `shares` and `value` records.
         shares: {
             enumerable: true,
-
-            get: function () {
-                return _shares;
-            },
-
-            set: function (shares) {
-                if (shares === _shares) { return; }
-
-                notifier.notify({
-                    type    : UPDATE_TYPE,
-                    name    : 'shares',
-                    oldValue: _shares
-                });
-
-                notifier.notify({
-                    type    : UPDATE_TYPE,
-                    name    : 'value',
-                    oldValue: this.value
-                });
-
-                _shares = shares;
-            }
+            get       : this._getShares,
+            set       : this._setShares
         },
 
-        // Accessor which computes the current holding's `value`.
         value: {
             enumerable: true,
-
-            get: function () {
-                return this.quote.price * _shares;
-            }
+            get       : this._getValue
         }
     });
 
     // Observes the `quote` for price changes so it can generate a synthetic
     // `value` change record.
-    Object.observe(quote, function (records) {
+    Object.observe(quote, this._quoteObserver.bind(this), [UPDATE_TYPE]);
+}
+
+Holding.prototype = {
+    // -- Accessors ------------------------------------------------------------
+    _getShares: function () {
+        return this._shares;
+    },
+
+    _getValue: function () {
+        return this.quote.price * this.shares;
+    },
+
+    _setShares: function (shares) {
+        if (shares === this.shares) { return; }
+
+        this._notifySharesChange(this.shares);
+        this._notifyValueChange(this.value);
+
+        this._shares = shares;
+    },
+
+    // -- Observers ------------------------------------------------------------
+
+    _quoteObserver: function (records) {
         // TODO: Optimize to a single `notify()` via `reverse().some()`?
         records.forEach(function (record) {
             if (record.name === 'price') {
-                notifier.notify({
+                this._notifier.notify({
                     type    : UPDATE_TYPE,
                     name    : 'value',
-                    oldValue: record.oldValue * _shares
+                    oldValue: record.oldValue * this.shares
                 });
             }
+        }, this);
+    },
+
+    // -- Notifiers ------------------------------------------------------------
+
+    _notifySharesChange: function (oldShares) {
+        this._notifier.notify({
+            type    : UPDATE_TYPE,
+            name    : 'shares',
+            oldValue: oldShares
         });
-    }, [UPDATE_TYPE]);
-}
+    },
+
+    _notifyValueChange: function (oldValue) {
+        this._notifier.notify({
+            type    : UPDATE_TYPE,
+            name    : 'value',
+            oldValue: oldValue
+        });
+    }
+};
 
 // -- Portfolio ----------------------------------------------------------------
 
@@ -138,12 +151,12 @@ Portfolio.prototype = {
     },
 
     _setHoldings: function (holdings) {
-        if (holdings === this._holdings) { return; }
+        if (holdings === this.holdings) { return; }
 
-        this._notifyHoldingsChange(this._holdings);
+        this._notifyHoldingsChange(this.holdings);
         this._notifyValueChange(this.value);
 
-        this._unobserveHoldings(this._holdings);
+        this._unobserveHoldings(this.holdings);
         this._observeHoldings(holdings);
 
         this._holdings = holdings;
