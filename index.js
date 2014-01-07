@@ -52,9 +52,7 @@ function Holding(quote, shares) {
         }
     });
 
-    // Observes the `quote` for price changes so it can generate a synthetic
-    // `value` change record.
-    Object.observe(quote, this._quoteObserver.bind(this), [UPDATE_TYPE]);
+    this._observeQuote(quote);
 }
 
 Holding.prototype = {
@@ -89,6 +87,10 @@ Holding.prototype = {
                 });
             }
         }, this);
+    },
+
+    _observeQuote: function (quote) {
+        Object.observe(quote, this._quoteObserver.bind(this), [UPDATE_TYPE]);
     },
 
     // -- Notifiers ------------------------------------------------------------
