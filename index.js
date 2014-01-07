@@ -80,11 +80,7 @@ Holding.prototype = {
         // TODO: Optimize to a single `notify()` via `reverse().some()`?
         records.forEach(function (record) {
             if (record.name === 'price') {
-                this._notifier.notify({
-                    type    : UPDATE_TYPE,
-                    name    : 'value',
-                    oldValue: record.oldValue * this.shares
-                });
+                this._notifyValueChange(record.oldValue * this.shares);
             }
         }, this);
     },
