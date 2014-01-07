@@ -107,28 +107,64 @@ function Portfolio(name, holdings) {
     // Notifier to generate synthetic change records.
     var notifier = Object.getNotifier(this);
 
+    function notifyValueChange(oldValue) {
+        notifier.notify({
+            type    : UPDATE_TYPE,
+            name    : 'value',
+            oldValue: oldValue
+        });
+    }
+
     // Observer for both the collection of `holdings` being swapped out and a
     // single holding being updated, and generate a synthetic `value` record.
     function holdingsObserver(records) {
         // TODO: Optimize to a single `notify()` via `reverse().some()`?
         records.forEach(function (record) {
+            var addedCount = record.addedCount,
+                index      = record.index;
+
+            if (record.type === 'splice') {
+                record.removed.forEach(unobserveHolding);
+
+                if (addedCount) {
+                    observeHolding(record.object.slice(index, index + addedCount));
+                }
+            }
+
+            notifyValueChange(_portfolio.value);
+        });
+    }
+
+    function holdingObserver(records) {
+        // TODO: Optimize to a single `notify()` via `reverse().some()`?
+        records.forEach(function (record) {
             var oldValue;
 
-            if (record.name === 'value' || Array.isArray(record.object)) {
+            if (record.name === 'value') {
                 oldValue = _portfolio.value;
+                oldValue += record.object.value - record.oldValue;
 
-                // Adjust `oldValue` by the amount the single holding changed.
-                if (!Array.isArray(record.object)) {
-                    oldValue += record.object.value - record.oldValue;
-                }
-
-                notifier.notify({
-                    type    : UPDATE_TYPE,
-                    name    : 'value',
-                    oldValue: oldValue
-                });
+                notifyValueChange(oldValue);
             }
         });
+    }
+
+    function observeHoldings(holdings) {
+        Array.observe(holdings, holdingsObserver, [UPDATE_TYPE, 'splice']);
+        holdings.forEach(observeHolding);
+    }
+
+    function unobserveHoldings(holdings) {
+        Array.unobserve(holdings, holdingsObserver);
+        holdings.forEach(unobserveHolding);
+    }
+
+    function observeHolding(holding) {
+        Object.observe(holding, holdingObserver, [UPDATE_TYPE]);
+    }
+
+    function unobserveHolding(holding) {
+        Object.unobserve(holding, holdingObserver);
     }
 
     this.name = name;
@@ -150,10 +186,7 @@ function Portfolio(name, holdings) {
 
                 // Unobserve both the `holdings` collection _and_ every holding
                 // because the entire collection is being swapped.
-                Array.unobserve(_holdings, holdingsObserver);
-                _holdings.forEach(function (holding) {
-                    Object.unobserve(holding, holdingsObserver);
-                });
+                unobserveHoldings(_holdings);
 
                 notifier.notify({
                     type    : UPDATE_TYPE,
@@ -161,20 +194,13 @@ function Portfolio(name, holdings) {
                     oldValue: _holdings
                 });
 
-                notifier.notify({
-                    type    : UPDATE_TYPE,
-                    name    : 'value',
-                    oldValue: this.value
-                });
+                notifyValueChange(this.value);
 
                 _holdings = holdings;
 
                 // Observe both the new `holdings` collection _and_ every new
                 // holding object.
-                Array.observe(holdings, holdingsObserver, [UPDATE_TYPE, 'splice']);
-                holdings.forEach(function (holding) {
-                    Object.observe(holding, holdingsObserver, [UPDATE_TYPE]);
-                });
+                observeHoldings(holdings);
             }
         },
 
@@ -191,10 +217,7 @@ function Portfolio(name, holdings) {
     });
 
     // Observe both the `holdings` collection _and_ every holding object.
-    Array.observe(holdings, holdingsObserver, [UPDATE_TYPE, 'splice']);
-    holdings.forEach(function (holding) {
-        Object.observe(holding, holdingsObserver, [UPDATE_TYPE]);
-    });
+    observeHoldings(holdings);
 }
 
 // -----------------------------------------------------------------------------
@@ -204,6 +227,7 @@ var quotes = {
     AAPL: new Quote('AAPL', 543.00),
     GOOG: new Quote('GOOG', 1117.00),
     QQQ : new Quote('QQQ', 86.31),
+    FB  : new Quote('FB', 57.00)
 };
 
 var p1 = new Portfolio('Tech', [
@@ -231,3 +255,5 @@ console.log(p2.name, p2.value);
 quotes.YHOO.price += 10.00;
 quotes.GOOG.price -= 250.00;
 console.log(quotes);
+
+p2.holdings.push(new Holding(quotes.FB, 75));
